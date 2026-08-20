@@ -1,0 +1,114 @@
+local component = require("component")
+local gpu = component.gpu
+local event = require("event")
+local computer = require("computer")
+
+if not component.isAvailable("modem") then
+  print("HATA: Modem eksik!")
+  return
+end
+
+local modem = component.modem
+modem.open(20)
+
+local sonDurum = "HAZIR"
+local sayac = "--"
+
+local function sinyalGonder(komut)
+  modem.broadcast(20, komut)
+end
+
+local function arayuzCiz()
+  gpu.setBackground(0x0F172A)
+  gpu.fill(1, 1, 80, 25, " ")
+
+  -- Başlık
+  gpu.setBackground(0x1E293B)
+  gpu.setForeground(0x38BDF8)
+  gpu.fill(1, 1, 80, 2, " ")
+  gpu.set(20, 1, "=== NÜKLEER GERİ SAYIM KUMANDASI ===")
+
+  -- ATEŞLE / GERİ SAYIM BUTONU (Kırmızı)
+  gpu.setBackground(0x991B1B)
+  gpu.setForeground(0xFFFFFF)
+  gpu.fill(15, 5, 50, 4, " ")
+  gpu.set(24, 7, "🚀 GERİ SAYIMI BAŞLAT (10s)")
+
+  -- İPTAL / KAPAT BUTONU (Sarı/Mavi)
+  gpu.setBackground(0x1E3A8A)
+  gpu.setForeground(0xFFFFFF)
+  gpu.fill(15, 11, 50, 4, " ")
+  gpu.set(28, 13, "🛑 GERİ SAYIMI İPTAL ET")
+
+  -- CANLI GERİ SAYIM EKRANI
+  gpu.setBackground(0x000000)
+  gpu.setForeground(0xEF4444)
+  gpu.fill(20, 17, 40, 3, " ")
+  gpu.set(22, 18, "KALAN SÜRE: " .. sayac .. " SN")
+
+  -- Durum Göstergesi
+  gpu.setBackground(0x1E293B)
+  gpu.setForeground(0xFACC15)
+  gpu.fill(10, 21, 60, 2, " ")
+  gpu.set(12, 22, "DURUM: " .. sonDurum)
+
+  -- Çıkış
+  gpu.setBackground(0x374151)
+  gpu.setForeground(0x9CA3AF)
+  gpu.fill(15, 24, 50, 1, " ")
+  gpu.set(32, 24, "[ KUMANDAYI KAPAT ]")
+end
+
+arayuzCiz()
+
+while true do
+  local eventType, _, sender, port, _, header, msg = event.pull(0.1)
+
+  -- Server'dan gelen sayaç ve durum verileri
+  if eventType == "modem_message" and port == 20 then
+    if header == "SAYAC" then
+      sayac = tostring(msg)
+      sonDurum = "GERI SAYIM SURUYOR!"
+      computer.beep(1200, 0.05)
+      arayuzCiz()
+    elseif header == "DURUM" then
+      sonDurum = tostring(msg)
+      if msg == "DURDURULDU" or msg == "KAPALI" then
+        sayac = "--"
+      elseif msg == "PATLADI!" then
+        sayac = "00"
+      end
+      arayuzCiz()
+    end
+  end
+
+  -- Dokunmatik Tıklamaları
+  if eventType == "touch" then
+    local x, y = event.pull("touch", nil, nil) -- x, y koordinatları
+    local touchX, touchY = select(3, event.pull("touch"))
+
+    -- GERİ SAYIM BAŞLAT
+    if touchX >= 15 and touchX <= 65 and touchY >= 5 and touchY <= 8 then
+      sinyalGonder("AC")
+      sonDurum = "Geri sayim baslatildi..."
+      arayuzCiz()
+    end
+
+    -- İPTAL ET
+    if touchX >= 15 and touchX <= 65 and touchY >= 11 and touchY <= 14 then
+      sinyalGonder("KAPAT")
+      sonDurum = "Iptal emri gonderildi!"
+      sayac = "--"
+      arayuzCiz()
+    end
+
+    -- ÇIKIŞ
+    if touchX >= 15 and touchX <= 65 and touchY == 24 then
+      gpu.setBackground(0x000000)
+      gpu.setForeground(0xFFFFFF)
+      gpu.fill(1, 1, 80, 25, " ")
+      print("Kumanda Kapatildi.")
+      break
+    end
+  end
+end
