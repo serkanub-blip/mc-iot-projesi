@@ -1,0 +1,69 @@
+local component = require("component")
+local event = require("event")
+local sides = require("sides")
+local computer = require("computer")
+
+if not component.isAvailable("redstone") or not component.isAvailable("modem") then
+  print("HATA: Redstone veya Modem karti eksik!")
+  return
+end
+
+local rs = component.redstone
+local modem = component.modem
+modem.open(20)
+
+local yon = sides.back
+local geriSayimAktif = false
+
+local function bip(freq, duration)
+  pcall(function() computer.beep(freq or 1000, duration or 0.1) end)
+end
+
+print("========================================")
+print("  NUKLEER GERI SAYIM SERVERI AKTIF")
+print("========================================")
+
+while true do
+  local eventType, _, sender, port, _, command = event.pull(0.1, "modem_message")
+
+  if eventType == "modem_message" and port == 20 then
+    if command == "AC" and not geriSayimAktif then
+      geriSayimAktif = true
+      print("\n[TEHLIKE] Tablet'ten ATEŞLEME emri alindi!")
+      
+      -- 10 Saniyelik Geri Sayım Döngüsü
+      for i = 10, 1, -1 do
+        -- İptal emri geldi mi diye kontrol et
+        local _, _, _, _, _, cancelCmd = event.pull(0.8, "modem_message")
+        if cancelCmd == "KAPAT" then
+          geriSayimAktif = false
+          print("[IPTAL] Geri sayim Tablet tarafindan DURDURULDU!")
+          modem.broadcast(20, "DURUM", "DURDURULDU")
+          bip(500, 0.5)
+          break
+        end
+
+        print("-> ATEŞLEMEYE SON: " .. i .. " saniye!")
+        modem.broadcast(20, "SAYAC", tostring(i))
+        bip(1000 + ((11 - i) * 100), 0.1)
+      end
+
+      -- Eğer iptal edilmediyse PATLAT!
+      if geriSayimAktif then
+        print("[💥 PATLAMA] SINYAL VERILDI!")
+        modem.broadcast(20, "DURUM", "PATLADI!")
+        bip(2000, 0.5)
+        rs.setOutput(yon, 15)
+        os.sleep(2)
+        rs.setOutput(yon, 0)
+        geriSayimAktif = false
+      end
+
+    elseif command == "KAPAT" then
+      rs.setOutput(yon, 0)
+      geriSayimAktif = false
+      print("[SISTEM] Sinyal kapatildi / Sifirlandi.")
+      modem.broadcast(20, "DURUM", "KAPALI")
+    end
+  end
+end
